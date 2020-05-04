@@ -1,0 +1,323 @@
+ <!--"https://bl.ocks.org/mbostock/ad70335eeef6d167bc36fd3c04378048"-->
+<!--"https://stackoverflow.com/questions/38271595/tooltips-with-canvas-networks" - where I got click function-->
+<!DOCTYPE html>
+<meta charset="utf-8">
+<body>
+	<form>
+      <button>Start</button>
+    </form>
+</body>
+<canvas width="600" height="650"></canvas>
+
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+
+<script>
+
+var canvas = document.querySelector("canvas"),
+    context = canvas.getContext("2d"),
+    width = canvas.width,
+    height = canvas.height,
+    color = d3.scaleOrdinal(d3.schemeCategory20);
+
+
+var simulation = d3.forceSimulation()
+    .force("link", d3.forceLink().id(function(d) { return d.id; }))
+    .force("charge", d3.forceManyBody().strength(-20))
+    .force("center", d3.forceCenter(width / 2, height / 2));
+
+
+// open up the json file graph, can use any graph BUT:
+  // node objects need an id and a name attribute
+  // links must have a source and target attribute
+d3.json("https://raw.githubusercontent.com/amlopa16/JSON-test-files/master/test1.json", function(error, graph) {
+  if (error) throw error;
+
+  // setting up canvas with the nodes/links
+  simulation.nodes(graph.nodes)
+	  .on("tick", ticked);
+
+  simulation.force("link")
+      .links(graph.links);
+
+  d3.select(canvas)
+      .call(d3.drag()
+          .container(canvas)
+          .subject(dragsubject)   // functions to be able to drag the graph around, dragsubject/dragstarted/dragged/dragended
+          .on("start", dragstarted) 
+          .on("drag", dragged)
+          .on("end", dragended));
+
+  var count = 0;
+  clickNodes = [];
+
+  // this code just prepares the path for clicking - turns the list of ids into list of nodes
+  const path_ids = bfs(graph.nodes[0]);
+	const path = [get_node(path_ids[0])];
+	for (let i = 1; i < path_ids.length; i++){
+	  path.push(get_node(path_ids[i]));
+    };
+  var idcnodes = path;
+  
+
+  // this ticked() function is important!!! This function is called constantly. This is what allows the graph to move around and be dynamic.
+  // The nodes/links need to be redrawn onto the canvas constantly. If a node's position updates, this function will redraw it with the new postion. 
+  function ticked() {
+  	
+    context.clearRect(0, 0, width, height);
+
+    context.beginPath();
+    graph.links.forEach(drawLink);
+
+    idcnodes.forEach(drawNode);
+    
+	if (clicked) {
+		if (count < path.length){
+    		console.log(path[count]);
+    		clickNodes.push(path[count]);
+    		delete idcnodes[count];
+  			count++;
+    	}
+    }
+    clicked = false;
+    context.beginPath();
+    clickNodes.forEach(drawClickedNode);
+  }
+
+  var clicked;
+    d3.select(canvas).on("click", function(d){
+      clicked = true;
+      ticked();
+  });
+
+  // this function uses simulation.find() to constantly update the location of the graphs/nodes
+  function dragsubject() {
+    return simulation.find(d3.event.x, d3.event.y);
+  }
+
+
+  // builds an edge_to dictionary 
+  // does not contain actual node objects, only id's
+  function build_adjacencylist() {
+    var dict = {}; // my adjacency list of nodes and their neighbors
+    for (i = 0; i < graph.links.length; i++){
+      var id = graph.links[i].source.id;
+      var target = [graph.links[i].target.id];
+
+      if (dict[id] == null){
+        dict[id] = target;
+      }
+      else{
+        dict[id].push(graph.links[i].target.id);
+      }
+    }
+    for (i = 0; i < graph.links.length; i++){
+      var id = graph.links[i].target.id;
+      var target = [graph.links[i].source.id];
+
+      if (dict[id] == null){
+        dict[id] = target;
+      }
+      else{
+        dict[id].push(graph.links[i].source.id);
+      }
+    }
+    return dict;
+  }
+
+
+  // given a valid id, returns the node object with that ID
+  function get_node(id){
+    var node;
+    for (i=0; i < graph.nodes.length; i++){
+      if (graph.nodes[i].id == id){
+          node = graph.nodes[i];
+      }
+    }
+    return node;
+  }
+
+  function get_connecting_link(first_id, sec_id) {
+  	var connecting_link = null;
+  	var links1 = get_neighbor_links(first_id);
+  	for (let i = 0; i < links1.length; i++){
+  		if (links1[i].target.id === sec_id) {
+  			connecting_link = links1[i];
+  		}	
+  	}
+  	var links2 = get_neighbor_links(sec_id);
+  	for (let i = 0; i < links2.length; i++){
+  		if (links2[i].target.id === first_id) {
+  			connecting_link = links2[i];
+  		}	
+  	}
+  	return connecting_link;
+  }
+
+
+  // given a valid id, returns a list of node objects that are 
+  // the neighbors of the node with the given ID
+  function get_neighbor_nodes(d){
+    var edge_to = build_adjacencylist();
+    var neighbors = [];
+    neighbor_nodes = [];
+    for (var key in edge_to){
+      if (key == d){     
+        for(i=0; i < edge_to[key].length; i++){
+          neighbors.push(edge_to[key][i]);
+        }
+        for (var n in neighbors){
+          neighbor_nodes.push(get_node(neighbors[n]));
+        }
+      }
+    }
+    return neighbor_nodes;
+  }
+
+  // given a valid ID, returns a list of link objects that are 
+  // connected to the node with the given ID
+  function get_neighbor_links(d){
+    var neighbor_links = [];
+    for (i = 0; i < graph.links.length; i++){
+      if (graph.links[i].source.id == d || graph.links[i].target.id == d){
+        if (neighbor_links.includes(graph.links[i]) == true){
+          //pass
+        }
+        else{
+          neighbor_links.push(graph.links[i]);
+        }
+      }
+    }
+    return neighbor_links;
+  }
+
+  // using queue implementation
+  function bfs(start) {
+    const order = [];
+    const q = [];
+    const explored = [];
+    q.push(start);
+
+    explored.push(start);
+
+    while (q.length != 0) {
+      let t = q.shift();
+
+      order.push(t.id);
+
+      get_neighbor_nodes(t.id)
+      .filter(n => !explored.includes(n))
+      .forEach(n => {
+         explored.push(n);
+         q.push(n);
+      });
+    }
+    return order;
+  }
+
+  function dfs(start) {
+    const order = [];
+    const q = [];
+    const explored = [];
+    q.push(start);
+
+    explored.push(start);
+
+    while (q.length != 0) {
+      let t = q.pop();
+
+      order.push(t.id);
+
+      get_neighbor_nodes(t.id)
+      .filter(n => !explored.includes(n))
+      .forEach(n => {
+          explored.push(n);
+          q.push(n);
+      });
+    }
+    return order;
+  }
+
+  // n is the index of the tiem in the subarrays you would like to sort on
+  function sortbyvalue(arr, n) { 
+    const len = arr.length; 
+    for (let i = 1; i < len; ++i) { 
+      var val = arr[i][n]; 
+      var j = i - 1; 
+
+      while (j >= 0 && arr[j][n] > val) { 
+        var temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp; 
+        j = j - 1; 
+        i = i -1;
+      } 
+    } 
+    return arr;
+  }
+
+});
+
+
+
+function dragstarted() {
+  if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+  d3.event.subject.fx = d3.event.subject.x;
+  d3.event.subject.fy = d3.event.subject.y;
+}
+
+function dragged() {
+  d3.event.subject.fx = d3.event.x;
+  d3.event.subject.fy = d3.event.y;
+}
+
+function dragended() {
+  if (!d3.event.active) simulation.alphaTarget(0);
+  d3.event.subject.fx = null;
+  d3.event.subject.fy = null;
+}
+
+function drawLink(d) {
+  context.moveTo(d.source.x, d.source.y);
+  context.lineTo(d.target.x, d.target.y);
+  context.strokeStyle = "#3b3c3d";
+  context.stroke();
+}
+
+function highlight_link(d) {
+  context.moveTo(d.source.x, d.source.y);
+  context.lineTo(d.target.x, d.target.y);
+  context.strokeStyle = "#ff0000";
+  context.stroke();
+}
+
+
+function drawNode(d) {
+  context.beginPath();
+  context.fillStyle = color(d.name);
+  context.moveTo(d.x + 3, d.y);
+  context.arc(d.x, d.y, 6, 0, 2 * Math.PI);
+  context.fill();
+
+}
+
+function drawClickedNode(d) {
+  context.moveTo(d.x + 3, d.y);
+  context.arc(d.x, d.y, 6, 0, 2 * Math.PI);
+  context.font = "bold 16px Arial";
+  context.fillStyle = "#000000";
+  context.fillText(d.id, d.x+10, d.y+3);
+  context.fillStyle = "#FFFF00";
+  context.fill();
+}
+
+function highlight(d) {
+  context.moveTo(d.x + 3, d.y);
+  context.arc(d.x, d.y, 8, 0, 2 * Math.PI);
+  context.fillStyle = "#FFFF00";
+  context.fillStyle = "#FFFF00";
+  context.fill();
+}
+
+
+</script>
