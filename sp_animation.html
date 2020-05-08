@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <body>
 	<form>
-      <button>Start</button>
+      <button>Reset Graph</button>
     </form>
 </body>
 <canvas width="600" height="650"></canvas>
@@ -195,24 +195,6 @@ d3.json("https://raw.githubusercontent.com/amlopa16/JSON-test-files/master/test1
     return neighbor_links;
   }
 
-
-  // n is the index of the tiem in the subarrays you would like to sort on
-  function sortbyvalue(arr, n) { 
-    const len = arr.length; 
-    for (let i = 1; i < len; ++i) { 
-      var val = arr[i][n]; 
-      var j = i - 1; 
-
-      while (j >= 0 && arr[j][n] > val) { 
-        var temp = arr[i];
-        arr[i] = arr[j];
-        arr[j] = temp; 
-        j = j - 1; 
-        i = i -1;
-      } 
-    } 
-    return arr;
-  }
 
   // start and dest are node objects - returns an array of node IDs in the shortest path
   function shortest_path(start, dest){
